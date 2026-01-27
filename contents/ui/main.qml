@@ -5,6 +5,7 @@ import org.kde.plasma.components 3.0 as PlasmaComponents
 
 PlasmoidItem {
     id: root
+    readonly property string apiKey: "YourApiKeyHere"
     
     // --- CONFIGURATION ---
     Plasmoid.backgroundHints: "NoBackground"
@@ -30,7 +31,6 @@ PlasmoidItem {
     property string sunsetTime: "--:--"
     property string moonIconPath: "" 
 
-    readonly property string apiKey: "38622d42138bd34c49e0d6376e51109c"
     readonly property string lat: "31.063635"
     readonly property string lon: "-97.897753"
 
