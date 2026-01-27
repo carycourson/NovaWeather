@@ -1,0 +1,47 @@
+# --- Build Artifacts ---
+build/
+bin/
+obj/
+*.so
+*.o
+*.a
+
+# --- CMake ---
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+
+# --- KDE/Plasma Specific ---
+# Metadata generated during development or installation
+.directory
+*.shell
+*.kdev4
+.kdev4/
+
+# --- Language/Framework Specific ---
+# QML/Qt artifacts
+*.qmlc
+*.jsc
+
+# Node/NPM (if using for build tools/linters)
+node_modules/
+package-lock.json
+
+# Python (if used for backend scripts)
+__pycache__/
+*.py[cod]
+
+# --- IDEs and Editors ---
+.vscode/
+.idea/
+*.swp
+*~
+.kateconfig
+
+# --- OS Generated ---
+.DS_Store
+Thumbs.db

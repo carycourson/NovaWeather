@@ -1,0 +1,21 @@
+{
+    "KPlugin": {
+        "Id": "com.scott.novaweather",
+        "Name": "Nova Weather",
+        "Description": "A custom weather widget",
+        "Icon": "weather-clear",
+        "Authors": [
+            {
+                "Name": "Scott",
+                "Email": "fireok@gmail.com"
+            }
+        ],
+        "Category": "Date and Time",
+        "Version": "1.0",
+        "Website": "",
+        "License": "GPL-2.0+",
+        "EnabledByDefault": true
+    },
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-Plasma-MainScript": "ui/main.qml"
+}
