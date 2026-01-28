@@ -6,7 +6,10 @@ import org.kde.plasma.components 3.0 as PlasmaComponents
 PlasmoidItem {
     id: root
     readonly property string apiKey: "YourApiKeyHere"
-    
+    readonly property string lat: "31.063635"
+    readonly property string lon: "-97.897753"
+    readonly property int updateInterval: 10 // in minutes
+
     // --- CONFIGURATION ---
     Plasmoid.backgroundHints: "NoBackground"
     preferredRepresentation: fullRepresentation
@@ -15,12 +18,13 @@ PlasmoidItem {
     property string currentTemp: "--"
     property string feelsLike: "--"
     property string cityName: "Loading..."
+    property string countryCode: ""
     property string conditionText: "..."
     property string iconPath: ""
-    
+
     property string windString: "--"
     property int windDeg: 0
-    
+
     property string humidity: "--"
     property string uvIndex: "--"
     property string pressure: "--"
@@ -29,10 +33,11 @@ PlasmoidItem {
 
     property string sunriseTime: "--:--"
     property string sunsetTime: "--:--"
-    property string moonIconPath: "" 
+    property string moonIconPath: ""
 
-    readonly property string lat: "31.063635"
-    readonly property string lon: "-97.897753"
+    property string currentTime: "--:--"
+    property string tzAbbrev: ""
+    property int timezoneOffset: 0
 
     ListModel { id: forecastModel }
 
@@ -45,10 +50,14 @@ PlasmoidItem {
             if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
                 var json = JSON.parse(xhr.responseText);
                 
+                // --- TIMEZONE ---
+                root.timezoneOffset = json.timezone_offset;
+                root.tzAbbrev = getTimezoneAbbrev(json.timezone, json.timezone_offset);
+                root.currentTime = formatTimeWithOffset(Math.floor(Date.now() / 1000), json.timezone_offset);
+                
                 // --- CURRENT ---
                 root.currentTemp = Math.floor(json.current.temp) + "°";
                 root.feelsLike = Math.floor(json.current.feels_like) + "°";
-                root.cityName = "Copperas Cove";
                 root.conditionText = json.current.weather[0].main;
                 root.iconPath = getIconPath(json.current.weather[0].icon);
                 
@@ -67,8 +76,10 @@ PlasmoidItem {
 
                 root.humidity = json.current.humidity + " %";
                 root.uvIndex = Math.floor(json.current.uvi) + " / 11";
-                root.sunriseTime = formatTime(json.current.sunrise);
-                root.sunsetTime = formatTime(json.current.sunset);
+                
+                // Use timezone-aware time formatting for sunrise/sunset
+                root.sunriseTime = formatTimeWithOffset(json.current.sunrise, json.timezone_offset);
+                root.sunsetTime = formatTimeWithOffset(json.current.sunset, json.timezone_offset);
 
                 // Moon Phase Logic
                 if (json.daily && json.daily[0]) {
@@ -97,8 +108,65 @@ PlasmoidItem {
         xhr.open("GET", url);
         xhr.send();
     }
-
     // --- HELPERS ---
+    function fetchLocation() {
+        var xhr = new XMLHttpRequest();
+        var url = "https://api.openweathermap.org/geo/1.0/reverse?lat=" + lat + "&lon=" + lon + "&limit=1&appid=" + apiKey;
+        
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
+                var json = JSON.parse(xhr.responseText);
+                if (json.length > 0) {
+                    root.cityName = json[0].name;
+                    root.countryCode = json[0].country;
+                }
+            }
+        }
+        xhr.open("GET", url);
+        xhr.send();
+    }
+
+    function getTimezoneAbbrev(timezoneStr, offsetSeconds) {
+        // Map of common timezone strings to their abbreviations
+        var tzMap = {
+            "America/New_York": { standard: "EST", daylight: "EDT", stdOffset: -18000 },
+            "America/Chicago": { standard: "CST", daylight: "CDT", stdOffset: -21600 },
+            "America/Denver": { standard: "MST", daylight: "MDT", stdOffset: -25200 },
+            "America/Phoenix": { standard: "MST", daylight: "MST", stdOffset: -25200 },
+            "America/Los_Angeles": { standard: "PST", daylight: "PDT", stdOffset: -28800 },
+            "America/Anchorage": { standard: "AKST", daylight: "AKDT", stdOffset: -32400 },
+            "Pacific/Honolulu": { standard: "HST", daylight: "HST", stdOffset: -36000 },
+        };
+        
+        if (tzMap[timezoneStr]) {
+            var tz = tzMap[timezoneStr];
+            // If current offset differs from standard offset, we're in daylight time
+            var isDaylight = (offsetSeconds !== tz.stdOffset);
+            return isDaylight ? tz.daylight : tz.standard;
+        }
+        
+        // Fallback: generate UTC offset string
+        var hours = Math.floor(Math.abs(offsetSeconds) / 3600);
+        var sign = offsetSeconds >= 0 ? "+" : "-";
+        return "UTC" + sign + hours;
+    }
+
+    function formatTimeWithOffset(unix, offsetSeconds) {
+        // Create date adjusted for timezone offset
+        var utcMs = unix * 1000;
+        var localMs = utcMs + (offsetSeconds * 1000);
+        var d = new Date(localMs);
+        
+        // Use UTC methods since we've already applied the offset
+        var h = d.getUTCHours();
+        var m = d.getUTCMinutes();
+        var ampm = h >= 12 ? 'pm' : 'am';
+        h = h % 12;
+        h = h ? h : 12;
+        m = m < 10 ? '0' + m : m;
+        return h + ':' + m + ' ' + ampm;
+    }
+
     function getMoonIcon(val) {
         // Use a small buffer (0.02) for the exact phases
         if (val <= 0.02 || val >= 0.98) return "Icons/moon-new.png";
@@ -151,8 +219,11 @@ PlasmoidItem {
         return days[d.getDay()] + " " + months[d.getMonth()] + " " + d.getDate();
     }
 
-    Component.onCompleted: fetchWeather()
-    Timer { interval: 600000; running: true; repeat: true; onTriggered: fetchWeather() }
+    Component.onCompleted: {
+        fetchLocation();
+        fetchWeather();
+    }    
+    Timer { interval: updateInterval * 60 * 1000; running: true; repeat: true; onTriggered: fetchWeather() }
 
     // --- UI ---
     
@@ -194,6 +265,7 @@ PlasmoidItem {
                         onClicked: {
                             root.cityName = "Refreshing..."
                             fetchWeather()
+                            fetchLocation()
                         }
 
                         ColumnLayout {
@@ -202,39 +274,57 @@ PlasmoidItem {
                             width: parent.width
                             
                             PlasmaComponents.Label { 
-                                text: root.cityName + " US"; 
+                                text: root.cityName + (root.countryCode ? " " + root.countryCode : "")
                                 color: "white"; font.pixelSize: 14; font.family: "DejaVu Sans"
                                 Layout.fillWidth: true; wrapMode: Text.NoWrap; elide: Text.ElideRight
                             }
                             PlasmaComponents.Label { 
-                                text: formatTime(Date.now() / 1000) + " CST"; 
+                                text: root.currentTime + " " + root.tzAbbrev
                                 color: "#AAAAAA"; font.pixelSize: 12; font.family: "DejaVu Sans"
                             }
                         }
                     }
 
-                    RowLayout {
-                        spacing: 5
-                        PlasmaComponents.Label {
-                            text: root.currentTemp
-                            color: getTempColor(parseInt(root.currentTemp))
-                            font.pixelSize: 52
-                            font.family: "DejaVu Sans"
+                    MouseArea {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: mouseAreaContent.implicitHeight
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            // Toggle between daily and hourly views (not implemented yet)
+                            root.cityName = "Refreshing..."
+                            fetchWeather()
+                            fetchLocation()
                         }
-                        Item { Layout.fillWidth: true }
-                        Image {
-                            source: root.iconPath
-                            sourceSize.width: 58
-                            sourceSize.height: 58
+
+                        ColumnLayout {
+                            id: mouseAreaContent
+                            anchors.fill: parent
+                            spacing: 0
+
+                            RowLayout {
+                                spacing: 5
+                                PlasmaComponents.Label {
+                                    text: root.currentTemp
+                                    color: getTempColor(parseInt(root.currentTemp))
+                                    font.pixelSize: 52
+                                    font.family: "DejaVu Sans"
+                                }
+                                Item { Layout.fillWidth: true }
+                                Image {
+                                    source: root.iconPath
+                                    sourceSize.width: 58
+                                    sourceSize.height: 58
+                                }
+                            }
+                            
+                            PlasmaComponents.Label {
+                                text: root.conditionText
+                                color: "white"
+                                font.pixelSize: 15
+                                Layout.alignment: Qt.AlignRight
+                                font.family: "DejaVu Sans"
+                            }
                         }
-                    }
-                    
-                    PlasmaComponents.Label {
-                        text: root.conditionText
-                        color: "white"
-                        font.pixelSize: 15
-                        Layout.alignment: Qt.AlignRight
-                        font.family: "DejaVu Sans"
                     }
 
                     ColumnLayout {
